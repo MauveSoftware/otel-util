@@ -16,9 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-var (
-	tracer trace.Tracer
-)
+var tracer trace.Tracer
 
 // Tracer returns the configured tracer for the application
 func Tracer() trace.Tracer {
@@ -36,7 +34,7 @@ func Init(ctx context.Context, name, ver string, enabled bool, collectorEndpoint
 		return initTracingWithNoop()
 	}
 
-	return initTracingToCollector(ctx, ver, collectorEndpoint)
+	return initTracingToCollector(ctx, name, ver, collectorEndpoint)
 }
 
 func initTracingWithNoop() (func(), error) {
@@ -46,7 +44,7 @@ func initTracingWithNoop() (func(), error) {
 	return func() {}, nil
 }
 
-func initTracingToCollector(ctx context.Context, ver, collectorEndpoint string) (func(), error) {
+func initTracingToCollector(ctx context.Context, name, ver, collectorEndpoint string) (func(), error) {
 	logrus.Infof("Initialize tracing (agent: %s)", collectorEndpoint)
 
 	cl := otlptracegrpc.NewClient(
@@ -63,7 +61,7 @@ func initTracingToCollector(ctx context.Context, ver, collectorEndpoint string) 
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("shop-cache-invalidator"),
+			semconv.ServiceNameKey.String(name),
 			semconv.ServiceVersionKey.String(ver),
 		)),
 		sdktrace.WithSpanProcessor(bsp),
