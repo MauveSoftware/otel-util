@@ -24,15 +24,15 @@ func Tracer() trace.Tracer {
 }
 
 // Init initializes tracing with the given application name, version, and collector endpoint.
-// When enabled is false, it sets up a no-operation tracer.
+// When no collector address is set, it sets up a no-operation tracer.
 // It returns a cleanup function for proper shutdown and an error if initialization fails.
-func Init(ctx context.Context, name, ver string, enabled bool, collectorEndpoint string) (func(), error) {
+func Init(ctx context.Context, name, ver string, collectorEndpoint string) (func(), error) {
 	tracer = otel.GetTracerProvider().Tracer(
 		name,
 		trace.WithSchemaURL(semconv.SchemaURL),
 	)
 
-	if !enabled {
+	if len(collectorEndpoint) == 0 {
 		return initTracingWithNoop()
 	}
 
