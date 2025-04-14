@@ -23,7 +23,9 @@ func Tracer() trace.Tracer {
 	return tracer
 }
 
-// Init initializes the tracer
+// Init initializes tracing with the given application name, version, and collector endpoint.
+// When enabled is false, it sets up a no-operation tracer.
+// It returns a cleanup function for proper shutdown and an error if initialization fails.
 func Init(ctx context.Context, name, ver string, enabled bool, collectorEndpoint string) (func(), error) {
 	tracer = otel.GetTracerProvider().Tracer(
 		name,
@@ -45,7 +47,7 @@ func initTracingWithNoop() (func(), error) {
 }
 
 func initTracingToCollector(ctx context.Context, name, ver, collectorEndpoint string) (func(), error) {
-	logrus.Infof("Initialize tracing (agent: %s)", collectorEndpoint)
+	logrus.Infof("Initialize tracing (endpoint: %s)", collectorEndpoint)
 
 	cl := otlptracegrpc.NewClient(
 		otlptracegrpc.WithInsecure(),
@@ -53,17 +55,18 @@ func initTracingToCollector(ctx context.Context, name, ver, collectorEndpoint st
 	)
 	exp, err := otlptrace.New(ctx, cl)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC collector exporter: %w", err)
+		return nil, fmt.Errorf("failed to create gRPC tracing exporter: %w", err)
 	}
 
 	bsp := sdktrace.NewBatchSpanProcessor(exp)
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(name),
+		semconv.ServiceVersionKey.String(ver),
+	)
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(name),
-			semconv.ServiceVersionKey.String(ver),
-		)),
+		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(bsp),
 	)
 	otel.SetTracerProvider(tp)
