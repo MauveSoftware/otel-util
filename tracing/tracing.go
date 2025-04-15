@@ -6,12 +6,13 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -26,7 +27,7 @@ func Tracer() trace.Tracer {
 // Init initializes tracing with the given application name, version, and collector endpoint.
 // When no collector address is set, it sets up a no-operation tracer.
 // It returns a cleanup function for proper shutdown and an error if initialization fails.
-func Init(ctx context.Context, name, ver string, collectorEndpoint string) (func(), error) {
+func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	tracer = otel.GetTracerProvider().Tracer(
 		name,
 		trace.WithSchemaURL(semconv.SchemaURL),
@@ -36,7 +37,7 @@ func Init(ctx context.Context, name, ver string, collectorEndpoint string) (func
 		return initTracingWithNoop()
 	}
 
-	return initTracingToCollector(ctx, name, ver, collectorEndpoint)
+	return initTracingToCollector(ctx, name, collectorEndpoint, attrs...)
 }
 
 func initTracingWithNoop() (func(), error) {
@@ -46,7 +47,7 @@ func initTracingWithNoop() (func(), error) {
 	return func() {}, nil
 }
 
-func initTracingToCollector(ctx context.Context, name, ver, collectorEndpoint string) (func(), error) {
+func initTracingToCollector(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	logrus.Infof("Initialize tracing (endpoint: %s)", collectorEndpoint)
 
 	cl := otlptracegrpc.NewClient(
@@ -59,11 +60,9 @@ func initTracingToCollector(ctx context.Context, name, ver, collectorEndpoint st
 	}
 
 	bsp := sdktrace.NewBatchSpanProcessor(exp)
-	res := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(name),
-		semconv.ServiceVersionKey.String(ver),
-	)
+
+	attrs = append(attrs, semconv.ServiceName(name))
+	res := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),

@@ -6,13 +6,14 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogrus"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/log/noop"
 	logsdk "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 )
 
 var appName string
@@ -25,7 +26,7 @@ func Logger() log.Logger {
 // Init initializes the logger with the given application name, version, and collector endpoint.
 // When no collector address is set, it sets up a no-operation logger.
 // It returns a cleanup function for proper shutdown and an error if initialization fails.
-func Init(ctx context.Context, name, ver string, collectorEndpoint string) (func(), error) {
+func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	appName = name
 
 	if len(collectorEndpoint) == 0 {
@@ -33,7 +34,7 @@ func Init(ctx context.Context, name, ver string, collectorEndpoint string) (func
 		return func() {}, nil
 	}
 
-	return initLogger(ctx, name, ver, collectorEndpoint)
+	return initLogger(ctx, name, collectorEndpoint, attrs...)
 }
 
 func setLoggerProvider(lp log.LoggerProvider) {
@@ -43,7 +44,7 @@ func setLoggerProvider(lp log.LoggerProvider) {
 	logrus.AddHook(hook)
 }
 
-func initLogger(ctx context.Context, name, ver, collectorEndpoint string) (func(), error) {
+func initLogger(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	exp, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithInsecure(),
 		otlploggrpc.WithEndpoint(collectorEndpoint),
@@ -53,11 +54,9 @@ func initLogger(ctx context.Context, name, ver, collectorEndpoint string) (func(
 	}
 
 	bsp := logsdk.NewBatchProcessor(exp)
-	res := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(name),
-		semconv.ServiceVersionKey.String(ver),
-	)
+
+	attrs = append(attrs, semconv.ServiceName(name))
+	res := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 	lp := logsdk.NewLoggerProvider(
 		logsdk.WithResource(res),
 		logsdk.WithProcessor(bsp),
