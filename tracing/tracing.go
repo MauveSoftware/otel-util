@@ -27,7 +27,7 @@ func Tracer() trace.Tracer {
 // Init initializes tracing with the given application name, version, and collector endpoint.
 // When no collector address is set, it sets up a no-operation tracer.
 // It returns a cleanup function for proper shutdown and an error if initialization fails.
-func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
+func Init(ctx context.Context, name, version, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	tracer = otel.GetTracerProvider().Tracer(
 		name,
 		trace.WithSchemaURL(semconv.SchemaURL),
@@ -37,7 +37,7 @@ func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...a
 		return initTracingWithNoop()
 	}
 
-	return initTracingToCollector(ctx, name, collectorEndpoint, attrs...)
+	return initTracingToCollector(ctx, name, version, collectorEndpoint, attrs...)
 }
 
 func initTracingWithNoop() (func(), error) {
@@ -47,7 +47,7 @@ func initTracingWithNoop() (func(), error) {
 	return func() {}, nil
 }
 
-func initTracingToCollector(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
+func initTracingToCollector(ctx context.Context, name, version, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	logrus.Infof("Initialize tracing (endpoint: %s)", collectorEndpoint)
 
 	cl := otlptracegrpc.NewClient(
@@ -61,7 +61,10 @@ func initTracingToCollector(ctx context.Context, name string, collectorEndpoint 
 
 	bsp := sdktrace.NewBatchSpanProcessor(exp)
 
-	attrs = append(attrs, semconv.ServiceName(name))
+	attrs = append(attrs,
+		semconv.ServiceName(name),
+		semconv.ServiceVersion(version),
+	)
 	res := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),

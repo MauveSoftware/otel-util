@@ -26,7 +26,7 @@ func Logger() log.Logger {
 // Init initializes the logger with the given application name, version, and collector endpoint.
 // When no collector address is set, it sets up a no-operation logger.
 // It returns a cleanup function for proper shutdown and an error if initialization fails.
-func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
+func Init(ctx context.Context, name, version, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	appName = name
 
 	if len(collectorEndpoint) == 0 {
@@ -34,7 +34,7 @@ func Init(ctx context.Context, name string, collectorEndpoint string, attrs ...a
 		return func() {}, nil
 	}
 
-	return initLogger(ctx, name, collectorEndpoint, attrs...)
+	return initLogger(ctx, name, version, collectorEndpoint, attrs...)
 }
 
 func setLoggerProvider(lp log.LoggerProvider) {
@@ -44,7 +44,7 @@ func setLoggerProvider(lp log.LoggerProvider) {
 	logrus.AddHook(hook)
 }
 
-func initLogger(ctx context.Context, name string, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
+func initLogger(ctx context.Context, name, version, collectorEndpoint string, attrs ...attribute.KeyValue) (func(), error) {
 	exp, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithInsecure(),
 		otlploggrpc.WithEndpoint(collectorEndpoint),
@@ -55,7 +55,10 @@ func initLogger(ctx context.Context, name string, collectorEndpoint string, attr
 
 	bsp := logsdk.NewBatchProcessor(exp)
 
-	attrs = append(attrs, semconv.ServiceName(name))
+	attrs = append(attrs,
+		semconv.ServiceName(name),
+		semconv.ServiceVersion(version),
+	)
 	res := resource.NewWithAttributes(semconv.SchemaURL, attrs...)
 	lp := logsdk.NewLoggerProvider(
 		logsdk.WithResource(res),
